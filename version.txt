@@ -1,6 +1,7 @@
-9.1
+9.2
 
 What's New:
 Player is updated now..
 AI is updated 
 Drone added
+Shop is added
