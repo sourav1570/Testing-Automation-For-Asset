@@ -1,0 +1,15 @@
+{
+  "latestVersion": "1.2",
+  "updates": [
+    {
+      "version": "1.1",
+      "downloadUrl": "https://github.com/YOUR_USERNAME/MobileActionKit-Updates/releases/download/v1.1/CoreAI_Update.unitypackage",
+      "changelog": "Fixed Core AI Behaviour script bug."
+    },
+    {
+      "version": "1.2",
+      "downloadUrl": "https://github.com/YOUR_USERNAME/MobileActionKit-Updates/releases/download/v1.2/Wandering_Update.unitypackage",
+      "changelog": "Fixed Wandering script bug."
+    }
+  ]
+}
