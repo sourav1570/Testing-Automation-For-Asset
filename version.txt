@@ -1,4 +1,4 @@
-9.3
+9.4
 
 What's New:
-Added SpeedTest Script
+Speed changed to 10
