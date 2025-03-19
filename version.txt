@@ -1,4 +1,4 @@
-9.4
+9.5
 
 What's New:
-Speed changed to 10
+Speed changed to 25
