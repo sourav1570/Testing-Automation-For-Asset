@@ -1,4 +1,4 @@
-10.5
+10.6
 
 What's New:
-Test_New script added and the speed is changed to 120
+32  and 122
