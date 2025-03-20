@@ -8,6 +8,7 @@ public class Test : MonoBehaviour
     {
         // Add you code here
         // This is great and working in background
+        // 3rd point
     }
     
 }
