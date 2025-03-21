@@ -20,5 +20,5 @@ jobs:
 
       - name: Push updates to private repository
         run: |
-          git remote set-url origin https://x-access-token:${{ secrets.GH_PAT }}@github.com/YOUR_USERNAME/YOUR_REPO.git
+          git remote set-url origin https://x-access-token:${{ secrets.GH_PAT }}@github.com/sourav1570/YOUR_REPO.git
           git push origin main
