@@ -1,4 +1,4 @@
-2.3
+2.4
 
 What's New:
-Try 2.3
+Try 2.4
