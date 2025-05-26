@@ -25,7 +25,7 @@ public class UpdateChecker : EditorWindow
 
     private void CheckForUpdates()
     {
-        string url = $"https://raw.githubusercontent.com/{GitHubConfig.RepositoryOwner}/{GitHubConfig.RepositoryName}/main/version.txt";
+        string url = $"https://raw.githubusercontent.com/{GitHubConfig_Info.RepositoryOwner}/{GitHubConfig_Info.RepositoryName}/main/version.txt";
 
         WebClient client = new WebClient();
         string latestVersion = client.DownloadString(url).Trim();
@@ -43,7 +43,7 @@ public class UpdateChecker : EditorWindow
 
     private void DownloadUpdatedFiles(string newVersion)
     {
-        string fileUrl = $"https://raw.githubusercontent.com/{GitHubConfig.RepositoryOwner}/{GitHubConfig.RepositoryName}/main/MobileActionKit_{newVersion}.unitypackage";
+        string fileUrl = $"https://raw.githubusercontent.com/{GitHubConfig_Info.RepositoryOwner}/{GitHubConfig_Info.RepositoryName}/main/MobileActionKit_{newVersion}.unitypackage";
         string savePath = Application.dataPath + "/DownloadedUpdates/MobileActionKit_" + newVersion + ".unitypackage";
 
         WebClient client = new WebClient();
