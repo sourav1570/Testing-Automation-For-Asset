@@ -286,22 +286,47 @@ public class GitHubUpdater : EditorWindow
             //    Repaint();
             //}
 
+            //foreach (string filePath in selectedFiles)
+            //{
+            //    await Task.Run(() => PushFileToGitHub(repoOwner, repoName, token, filePath, commitMessage));
+            //   // alreadyPushedFiles.Add(filePath);
+
+            //    GitHubFileTracker.alreadyPushedFiles.Add(filePath);
+            //    GitHubFileTracker.SavePushedFiles();
+
+
+            //    // Add corresponding .meta file if it exists
+            //    string metaFile = filePath + ".meta";
+            //    if (File.Exists(Path.Combine(Application.dataPath, metaFile.Replace("Assets/", ""))))
+            //    {
+            //        alreadyPushedFiles.Add(metaFile);
+            //    }
+
+            //    processed++;
+            //    progress = (float)processed / total;
+            //    Repaint();
+            //}
+
             foreach (string filePath in selectedFiles)
             {
                 await Task.Run(() => PushFileToGitHub(repoOwner, repoName, token, filePath, commitMessage));
-                alreadyPushedFiles.Add(filePath);
 
-                // Add corresponding .meta file if it exists
+                // Add file and its meta (if exists) to alreadyPushedFiles and persist
+                GitHubFileTracker.alreadyPushedFiles.Add(filePath);
+
                 string metaFile = filePath + ".meta";
-                if (File.Exists(Path.Combine(Application.dataPath, metaFile.Replace("Assets/", ""))))
+                if (File.Exists(metaFile))
                 {
-                    alreadyPushedFiles.Add(metaFile);
+                    GitHubFileTracker.alreadyPushedFiles.Add(metaFile);
                 }
+
+                GitHubFileTracker.SavePushedFiles(); // Save once per file (fine for now, can optimize later)
 
                 processed++;
                 progress = (float)processed / total;
                 Repaint();
             }
+
 
 
             File.WriteAllText(pushedFilesPath, JsonConvert.SerializeObject(alreadyPushedFiles, Formatting.Indented));
