@@ -540,8 +540,19 @@ public class GitHubUpdater : EditorWindow
                 uploadStatusLabel = $"Uploading {processed + 1}/{total} files...";
                 Repaint();
                 bool mainUploadSuccess = await Task.Run(() => PushFileToGitHub(repoOwner, repoName, token, filePath, commitMessage));
+                //if (mainUploadSuccess)
+                //    alreadyPushedFiles.Add(filePath);
                 if (mainUploadSuccess)
+                {
                     alreadyPushedFiles.Add(filePath);
+
+                    // Remove from auto-tracked if present
+                    if (GitHubFileTracker.autoTrackedFiles.Contains(filePath))
+                    {
+                        GitHubFileTracker.autoTrackedFiles.Remove(filePath);
+                        GitHubFileTracker.SaveAutoTrackedFilesToDisk(); // Save updated list
+                    }
+                }
                 else
                     Debug.LogError($"Failed to upload {filePath}");
 
@@ -559,8 +570,19 @@ public class GitHubUpdater : EditorWindow
                     Repaint();
 
                     bool metaUploadSuccess = await Task.Run(() => PushFileToGitHub(repoOwner, repoName, token, metaRelative, commitMessage));
+                    //if (metaUploadSuccess)
+                    //    alreadyPushedFiles.Add(metaRelative);
                     if (metaUploadSuccess)
+                    {
                         alreadyPushedFiles.Add(metaRelative);
+
+                        // Remove from auto-tracked if present
+                        if (GitHubFileTracker.autoTrackedFiles.Contains(metaRelative))
+                        {
+                            GitHubFileTracker.autoTrackedFiles.Remove(metaRelative);
+                            GitHubFileTracker.SaveAutoTrackedFilesToDisk();
+                        }
+                    }
                     else
                         Debug.LogError($"Failed to upload {metaRelative}");
 
