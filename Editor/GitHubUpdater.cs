@@ -27,12 +27,40 @@ public class GitHubUpdater : EditorWindow
     private Vector2 selectedFilesScrollPos = Vector2.zero;
     private Vector2 historyScrollPos = Vector2.zero;
 
+    private FileHashData fileHashData = new FileHashData();
+    private string fileHashPath => Path.Combine(Application.persistentDataPath, "GitHubUpdater_FileHashes.json");
+    private string uploadStatusLabel = "";
+
+    private GUIStyle titleStyle;
+    private GUIStyle sectionHeaderStyle;
+    private GUIStyle buttonStyle;
+    private GUIStyle labelStyle;
+    private GUIStyle greenLabelStyle;
+    private GUIStyle boxStyle;
+
+
     [MenuItem("Tools/GitHub Updater")]
     public static void ShowWindow()
     {
         var window = GetWindow<GitHubUpdater>("GitHub Updater");
         window.LoadHistory();
         window.LoadPushedFiles();
+        window.LoadFileHashes();
+
+    }
+    private void LoadFileHashes()
+    {
+        if (File.Exists(fileHashPath))
+        {
+            string json = File.ReadAllText(fileHashPath);
+            fileHashData = JsonConvert.DeserializeObject<FileHashData>(json);
+        }
+    }
+
+    private void SaveFileHashes()
+    {
+        string json = JsonConvert.SerializeObject(fileHashData, Formatting.Indented);
+        File.WriteAllText(fileHashPath, json);
     }
 
     private void LoadHistory()
@@ -52,101 +80,328 @@ public class GitHubUpdater : EditorWindow
             alreadyPushedFiles = JsonConvert.DeserializeObject<HashSet<string>>(json);
         }
     }
+    private void InitStyles()
+    {
+        if (titleStyle == null)
+        {
+            titleStyle = new GUIStyle(EditorStyles.boldLabel);
+            titleStyle.fontSize = 18;
+            titleStyle.alignment = TextAnchor.MiddleCenter;
+            titleStyle.margin = new RectOffset(0, 0, 10, 10);
+
+            sectionHeaderStyle = new GUIStyle(EditorStyles.boldLabel);
+            sectionHeaderStyle.fontSize = 14;
+            sectionHeaderStyle.normal.textColor = Color.cyan;
+
+            buttonStyle = new GUIStyle(GUI.skin.button);
+            buttonStyle.fontSize = 12;
+            buttonStyle.fixedHeight = 28;
+
+            labelStyle = new GUIStyle(EditorStyles.label);
+            labelStyle.wordWrap = true;
+
+            greenLabelStyle = new GUIStyle(labelStyle);
+            greenLabelStyle.normal.textColor = Color.green;
+
+            boxStyle = new GUIStyle(GUI.skin.box);
+            boxStyle.padding = new RectOffset(8, 8, 8, 8);
+        }
+    }
 
     private void OnGUI()
     {
+        InitStyles();
+
+        GUILayout.Space(8);
+        GUILayout.Label("GitHub Updater", titleStyle);
+
         SyncAutoDetectedFiles();
 
-        GUILayout.Label("Select Files or Folder to Upload", EditorStyles.boldLabel);
+        EditorGUILayout.BeginVertical(boxStyle);
 
-        if (GUILayout.Button("Add Files"))
+        GUILayout.Label("Select Files or Folder to Upload", sectionHeaderStyle);
+        GUILayout.BeginHorizontal();
+        if (GUILayout.Button("Add Files", buttonStyle))
         {
             string filePath = EditorUtility.OpenFilePanel("Select File", Application.dataPath, "*");
             if (!string.IsNullOrEmpty(filePath)) AddFile(filePath);
         }
-
-        if (GUILayout.Button("Add Folder"))
+        if (GUILayout.Button("Add Folder", buttonStyle))
         {
             string folderPath = EditorUtility.OpenFolderPanel("Select Folder", Application.dataPath, "");
             if (!string.IsNullOrEmpty(folderPath)) AddFolder(folderPath);
         }
-
-        if (GUILayout.Button("Show New Changes"))
+        if (GUILayout.Button("Show New Changes", buttonStyle))
         {
             ScanForNewChanges();
         }
+        GUILayout.EndHorizontal();
 
-        GUILayout.Label("Selected Files:", EditorStyles.boldLabel);
+        GUILayout.Space(8);
 
-        selectedFilesScrollPos = EditorGUILayout.BeginScrollView(selectedFilesScrollPos, GUILayout.Height(150));
-        for (int i = 0; i < selectedFiles.Count; i++)
+        GUILayout.Label("Selected Files", sectionHeaderStyle);
+        selectedFilesScrollPos = EditorGUILayout.BeginScrollView(selectedFilesScrollPos, GUILayout.Height(160));
+        if (selectedFiles.Count == 0)
         {
-            GUILayout.BeginHorizontal();
-            GUILayout.Label(selectedFiles[i], GUILayout.ExpandWidth(true));
-            if (GUILayout.Button("❌", GUILayout.Width(25)))
+            GUILayout.Label("No files selected.", labelStyle);
+        }
+        else
+        {
+            for (int i = 0; i < selectedFiles.Count; i++)
             {
-                GitHubFileTracker.manuallyRemovedFiles.Add(selectedFiles[i]);
-                selectedFiles.RemoveAt(i);
-                i--;
+                GUILayout.BeginHorizontal();
+                GUILayout.Label(selectedFiles[i], labelStyle, GUILayout.ExpandWidth(true));
+                GUI.backgroundColor = Color.red;
+                if (GUILayout.Button("✕", GUILayout.Width(26), GUILayout.Height(18)))
+                {
+                    GitHubFileTracker.manuallyRemovedFiles.Add(selectedFiles[i]);
+                    selectedFiles.RemoveAt(i);
+                    i--;
+                }
+                GUI.backgroundColor = Color.white;
+                GUILayout.EndHorizontal();
             }
-            GUILayout.EndHorizontal();
         }
         EditorGUILayout.EndScrollView();
 
-        if (GUILayout.Button("Clear Selected Files"))
+        GUILayout.BeginHorizontal();
+        if (GUILayout.Button("Clear Selected Files", buttonStyle))
         {
             selectedFiles.Clear();
-           // GitHubFileTracker.manuallyRemovedFiles.Clear();
         }
-
-        if (GUILayout.Button("Show Current Version"))
+        if (GUILayout.Button("Show Current Version", buttonStyle))
         {
             version = GetCurrentVersionFromFile();
         }
+        GUILayout.EndHorizontal();
+
+        GUILayout.Space(10);
 
         version = EditorGUILayout.TextField("Version:", version);
-        whatsNew = EditorGUILayout.TextArea(whatsNew, GUILayout.Height(100));
+        GUILayout.Label("What's New:", sectionHeaderStyle);
+        whatsNew = EditorGUILayout.TextArea(whatsNew, GUILayout.Height(80));
 
-        if (GUILayout.Button("Push to GitHub") && !isPushing)
+        GUILayout.Space(10);
+
+        EditorGUI.BeginDisabledGroup(isPushing);
+        if (GUILayout.Button("Push to GitHub", GUILayout.Height(30)))
         {
             _ = PushToGitHubAsync();
         }
+        EditorGUI.EndDisabledGroup();
 
         if (isPushing)
         {
-            EditorGUI.ProgressBar(new Rect(10, position.height - 40, position.width - 20, 20), progress, "Uploading...");
-            Repaint();
+            GUILayout.Space(10);
+            EditorGUILayout.LabelField(uploadStatusLabel, sectionHeaderStyle);
+            Rect progressRect = GUILayoutUtility.GetRect(18, 18);
+            EditorGUI.ProgressBar(progressRect, progress, $"{Mathf.RoundToInt(progress * 100)}%");
+            GUILayout.Space(10);
         }
         else if (pushCompleted)
         {
-            GUIStyle style = new GUIStyle(GUI.skin.label) { normal = { textColor = Color.green } };
-            GUILayout.Label("Push Completed!", style);
+            GUILayout.Space(10);
+            GUILayout.Label("Push Completed!", greenLabelStyle);
         }
 
-        HandleDragAndDrop();
+        GUILayout.Space(10);
+        DrawDragAndDropArea();
 
         GUILayout.Space(10);
-        if (GUILayout.Button(showHistory ? "Hide History" : "Show History"))
+        if (GUILayout.Button(showHistory ? "Hide History" : "Show History", buttonStyle))
         {
             showHistory = !showHistory;
         }
 
         if (showHistory)
         {
-            GUILayout.Label("Push History", EditorStyles.boldLabel);
+            GUILayout.Label("Push History", sectionHeaderStyle);
             historyScrollPos = EditorGUILayout.BeginScrollView(historyScrollPos, GUILayout.Height(200));
-            foreach (var entry in versionHistory.entries)
+            if (versionHistory.entries.Count == 0)
             {
-                EditorGUILayout.BeginVertical("box");
-                GUILayout.Label("Version: " + entry.version, EditorStyles.boldLabel);
-                GUILayout.Label("Date: " + entry.dateTime);
-                GUILayout.Label("Notes:\n" + entry.whatsNew);
-                EditorGUILayout.EndVertical();
+                GUILayout.Label("No history available.", labelStyle);
+            }
+            else
+            {
+                foreach (var entry in versionHistory.entries)
+                {
+                    EditorGUILayout.BeginVertical(boxStyle);
+                    GUILayout.Label($"Version: {entry.version}", EditorStyles.boldLabel);
+                    GUILayout.Label($"Date: {entry.dateTime}", EditorStyles.miniLabel);
+                    GUILayout.Label("Notes:", EditorStyles.boldLabel);
+                    GUILayout.Label(entry.whatsNew, labelStyle);
+                    EditorGUILayout.EndVertical();
+                    GUILayout.Space(4);
+                }
             }
             EditorGUILayout.EndScrollView();
         }
+
+        EditorGUILayout.EndVertical();
     }
 
+    private void DrawDragAndDropArea()
+    {
+        Rect dropArea = GUILayoutUtility.GetRect(0, 50, GUILayout.ExpandWidth(true));
+        GUI.Box(dropArea, "Drag & Drop Files or Folders Here", boxStyle);
+
+        Event evt = Event.current;
+        if (!dropArea.Contains(evt.mousePosition)) return;
+
+        switch (evt.type)
+        {
+            case EventType.DragUpdated:
+            case EventType.DragPerform:
+                DragAndDrop.visualMode = DragAndDropVisualMode.Copy;
+                if (evt.type == EventType.DragPerform)
+                {
+                    DragAndDrop.AcceptDrag();
+                    foreach (var obj in DragAndDrop.objectReferences)
+                    {
+                        string path = AssetDatabase.GetAssetPath(obj);
+                        if (Directory.Exists(path))
+                            AddFolder(Path.Combine(Application.dataPath, path.Replace("Assets/", "")));
+                        else
+                            AddFile(Path.Combine(Application.dataPath, path.Replace("Assets/", "")));
+                    }
+                }
+                evt.Use();
+                break;
+        }
+    }
+
+    //private void OnGUI()
+    //{
+    //    SyncAutoDetectedFiles();
+
+    //    GUILayout.Label("Select Files or Folder to Upload", EditorStyles.boldLabel);
+
+    //    if (GUILayout.Button("Add Files"))
+    //    {
+    //        string filePath = EditorUtility.OpenFilePanel("Select File", Application.dataPath, "*");
+    //        if (!string.IsNullOrEmpty(filePath)) AddFile(filePath);
+    //    }
+
+    //    if (GUILayout.Button("Add Folder"))
+    //    {
+    //        string folderPath = EditorUtility.OpenFolderPanel("Select Folder", Application.dataPath, "");
+    //        if (!string.IsNullOrEmpty(folderPath)) AddFolder(folderPath);
+    //    }
+
+    //    if (GUILayout.Button("Show New Changes"))
+    //    {
+    //        ScanForNewChanges();
+    //}
+
+    //GUILayout.Label("Selected Files:", EditorStyles.boldLabel);
+
+    //selectedFilesScrollPos = EditorGUILayout.BeginScrollView(selectedFilesScrollPos, GUILayout.Height(150));
+    //for (int i = 0; i < selectedFiles.Count; i++)
+    //{
+    //    GUILayout.BeginHorizontal();
+    //    GUILayout.Label(selectedFiles[i], GUILayout.ExpandWidth(true));
+    //    if (GUILayout.Button("❌", GUILayout.Width(25)))
+    //    {
+    //        GitHubFileTracker.manuallyRemovedFiles.Add(selectedFiles[i]);
+    //        selectedFiles.RemoveAt(i);
+    //        i--;
+    //    }
+    //    GUILayout.EndHorizontal();
+    //}
+    //EditorGUILayout.EndScrollView();
+
+    //if (GUILayout.Button("Clear Selected Files"))
+    //{
+    //    selectedFiles.Clear();
+    //}
+
+    //if (GUILayout.Button("Show Current Version"))
+    //{
+    //    version = GetCurrentVersionFromFile();
+    //}
+
+    //version = EditorGUILayout.TextField("Version:", version);
+    //whatsNew = EditorGUILayout.TextArea(whatsNew, GUILayout.Height(100));
+
+    //if (GUILayout.Button("Push to GitHub") && !isPushing)
+    //{
+    //    _ = PushToGitHubAsync();
+    //}
+
+    //if (isPushing)
+    //{
+    //    EditorGUI.ProgressBar(new Rect(10, position.height - 40, position.width - 20, 20), progress, "Uploading...");
+    //    //    EditorGUILayout.LabelField(uploadStatusLabel, EditorStyles.boldLabel);
+    //    //    EditorGUI.ProgressBar(GUILayoutUtility.GetRect(18, 18), progress, "");
+    //    //    Repaint();
+    //    //}
+    //    if (isPushing)
+    //    {
+    //        GUILayout.Space(10);
+    //        EditorGUILayout.LabelField(uploadStatusLabel, EditorStyles.boldLabel);
+    //        Rect progressRect = GUILayoutUtility.GetRect(18, 18);
+    //        EditorGUI.ProgressBar(progressRect, progress, "");
+    //        GUILayout.Space(10);
+    //    }
+    //    else if (pushCompleted)
+    //    {
+    //        GUIStyle style = new GUIStyle(GUI.skin.label) { normal = { textColor = Color.green } };
+    //        GUILayout.Label("Push Completed!", style);
+    //    }
+
+    //    HandleDragAndDrop();
+
+    //    GUILayout.Space(10);
+    //    if (GUILayout.Button(showHistory ? "Hide History" : "Show History"))
+    //    {
+    //        showHistory = !showHistory;
+    //    }
+
+    //    if (showHistory)
+    //    {
+    //        GUILayout.Label("Push History", EditorStyles.boldLabel);
+    //        historyScrollPos = EditorGUILayout.BeginScrollView(historyScrollPos, GUILayout.Height(200));
+    //        foreach (var entry in versionHistory.entries)
+    //        {
+    //            EditorGUILayout.BeginVertical("box");
+    //            GUILayout.Label("Version: " + entry.version, EditorStyles.boldLabel);
+    //            GUILayout.Label("Date: " + entry.dateTime);
+    //            GUILayout.Label("Notes:\n" + entry.whatsNew);
+    //            EditorGUILayout.EndVertical();
+    //        }
+    //        EditorGUILayout.EndScrollView();
+    //    }
+    //}
+
+    //private void ScanForNewChanges()
+    //{
+    //    string[] allFiles = Directory.GetFiles(Application.dataPath, "*.*", SearchOption.AllDirectories);
+
+    //    foreach (string absPath in allFiles)
+    //    {
+    //        if (absPath.EndsWith(".meta")) continue;
+
+    //        string relativePath = "Assets" + absPath.Replace(Application.dataPath, "").Replace("\\", "/");
+
+    //        if (!alreadyPushedFiles.Contains(relativePath) &&
+    //            !GitHubFileTracker.manuallyRemovedFiles.Contains(relativePath) &&
+    //            !selectedFiles.Contains(relativePath))
+    //        {
+    //            selectedFiles.Add(relativePath);
+
+    //            string metaRelative = relativePath + ".meta";
+    //            string metaAbsPath = Path.Combine(Application.dataPath, metaRelative.Replace("Assets/", ""));
+
+    //            if (File.Exists(metaAbsPath) &&
+    //                !selectedFiles.Contains(metaRelative) &&
+    //                !alreadyPushedFiles.Contains(metaRelative) &&
+    //                !GitHubFileTracker.manuallyRemovedFiles.Contains(metaRelative))
+    //            {
+    //                selectedFiles.Add(metaRelative);
+    //            }
+    //        }
+    //    }
+    //}
     private void ScanForNewChanges()
     {
         string[] allFiles = Directory.GetFiles(Application.dataPath, "*.*", SearchOption.AllDirectories);
@@ -157,16 +412,22 @@ public class GitHubUpdater : EditorWindow
 
             string relativePath = "Assets" + absPath.Replace(Application.dataPath, "").Replace("\\", "/");
 
-            if (!alreadyPushedFiles.Contains(relativePath) &&
+            string currentHash = GetFileHash(absPath);
+
+            bool isNewFile = !fileHashData.fileHashes.ContainsKey(relativePath);
+            bool hasChanged = !isNewFile && fileHashData.fileHashes[relativePath] != currentHash;
+
+            if ((isNewFile || hasChanged) &&
                 !GitHubFileTracker.manuallyRemovedFiles.Contains(relativePath) &&
                 !selectedFiles.Contains(relativePath))
             {
                 selectedFiles.Add(relativePath);
 
                 string metaRelative = relativePath + ".meta";
-                if (File.Exists(Path.Combine(Application.dataPath, metaRelative.Replace("Assets/", ""))) &&
+                string metaAbsPath = Path.Combine(Application.dataPath, metaRelative.Replace("Assets/", ""));
+
+                if (File.Exists(metaAbsPath) &&
                     !selectedFiles.Contains(metaRelative) &&
-                    !alreadyPushedFiles.Contains(metaRelative) &&
                     !GitHubFileTracker.manuallyRemovedFiles.Contains(metaRelative))
                 {
                     selectedFiles.Add(metaRelative);
@@ -257,12 +518,12 @@ public class GitHubUpdater : EditorWindow
         string path = "Assets/version.txt";
         return File.Exists(path) ? File.ReadAllLines(path)[0] : "Unknown";
     }
-
     private async Task PushToGitHubAsync()
     {
         isPushing = true;
         pushCompleted = false;
         progress = 0f;
+        uploadStatusLabel = "Starting upload...";
         Repaint();
 
         string commitMessage = "Updating files to version " + version;
@@ -274,75 +535,129 @@ public class GitHubUpdater : EditorWindow
 
         if (versionUpdated)
         {
-            int total = selectedFiles.Count;
+            // ✅ Count total files including meta files
+            int total = 0;
+            foreach (string filePath in selectedFiles)
+            {
+                total++; // main file
+                string metaPath = Path.Combine(Application.dataPath, (filePath + ".meta").Replace("Assets/", ""));
+                if (File.Exists(metaPath)) total++; // meta file
+            }
+
             int processed = 0;
-
-            //foreach (string filePath in selectedFiles)
-            //{
-            //    await Task.Run(() => PushFileToGitHub(repoOwner, repoName, token, filePath, commitMessage));
-            //    alreadyPushedFiles.Add(filePath);
-            //    processed++;
-            //    progress = (float)processed / total;
-            //    Repaint();
-            //}
-
-            //foreach (string filePath in selectedFiles)
-            //{
-            //    await Task.Run(() => PushFileToGitHub(repoOwner, repoName, token, filePath, commitMessage));
-            //   // alreadyPushedFiles.Add(filePath);
-
-            //    GitHubFileTracker.alreadyPushedFiles.Add(filePath);
-            //    GitHubFileTracker.SavePushedFiles();
-
-
-            //    // Add corresponding .meta file if it exists
-            //    string metaFile = filePath + ".meta";
-            //    if (File.Exists(Path.Combine(Application.dataPath, metaFile.Replace("Assets/", ""))))
-            //    {
-            //        alreadyPushedFiles.Add(metaFile);
-            //    }
-
-            //    processed++;
-            //    progress = (float)processed / total;
-            //    Repaint();
-            //}
 
             foreach (string filePath in selectedFiles)
             {
+                string fileHash = GetFileHash(filePath);
+                string relativePath = "Assets" + filePath.Replace(Application.dataPath, "").Replace("\\", "/");
+                fileHashData.fileHashes[relativePath] = fileHash;
+
+                // ✅ Upload main file
+                uploadStatusLabel = $"Uploading {processed + 1}/{total} files...";
+                Repaint();
                 await Task.Run(() => PushFileToGitHub(repoOwner, repoName, token, filePath, commitMessage));
-
-                // Add file and its meta (if exists) to alreadyPushedFiles and persist
                 GitHubFileTracker.alreadyPushedFiles.Add(filePath);
-
-                string metaFile = filePath + ".meta";
-                if (File.Exists(metaFile))
-                {
-                    GitHubFileTracker.alreadyPushedFiles.Add(metaFile);
-                }
-
-                GitHubFileTracker.SavePushedFiles(); // Save once per file (fine for now, can optimize later)
-
+                // After main file upload
                 processed++;
                 progress = (float)processed / total;
+                uploadStatusLabel = $"Uploading {processed}/{total} files...";
                 Repaint();
+
+                // ✅ Upload .meta file if exists
+                string metaFile = filePath + ".meta";
+                string metaPath = Path.Combine(Application.dataPath, metaFile.Replace("Assets/", ""));
+                if (File.Exists(metaPath))
+                {
+                    uploadStatusLabel = $"Uploading {processed + 1}/{total} files...";
+                    Repaint();
+                    await Task.Run(() => PushFileToGitHub(repoOwner, repoName, token, metaPath, commitMessage));
+                    GitHubFileTracker.alreadyPushedFiles.Add(metaFile);
+
+                    // After .meta file upload (if exists)
+                    processed++;
+                    progress = (float)processed / total;
+                    uploadStatusLabel = $"Uploading {processed}/{total} files...";
+                    Repaint();
+                }
+
+                GitHubFileTracker.SavePushedFiles();
             }
 
-
-
-            File.WriteAllText(pushedFilesPath, JsonConvert.SerializeObject(alreadyPushedFiles, Formatting.Indented));
+            File.WriteAllText(pushedFilesPath, JsonConvert.SerializeObject(GitHubFileTracker.alreadyPushedFiles, Formatting.Indented));
         }
         else
         {
             Debug.LogError("Version update failed. Files not pushed.");
+            uploadStatusLabel = "Upload failed.";
         }
 
+        SaveFileHashes();
         selectedFiles.Clear();
         GitHubFileTracker.manuallyRemovedFiles.Clear();
         isPushing = false;
         pushCompleted = true;
-        SaveHistoryEntry(version, whatsNew);
+        uploadStatusLabel = "Upload completed!";
         Repaint();
     }
+
+
+    //private async Task PushToGitHubAsync()
+    //{
+    //    isPushing = true;
+    //    pushCompleted = false;
+    //    progress = 0f;
+    //    Repaint();
+
+    //    string commitMessage = "Updating files to version " + version;
+    //    string repoOwner = GitHubConfig_Info.RepositoryOwner;
+    //    string repoName = GitHubConfig_Info.RepositoryName;
+    //    string token = GitHubConfig_Info.Token;
+
+    //    bool versionUpdated = PushVersionFile(repoOwner, repoName, token, version, commitMessage);
+
+    //    if (versionUpdated)
+    //    {
+    //        int total = selectedFiles.Count;
+    //        int processed = 0;
+
+    //        foreach (string filePath in selectedFiles)
+    //        {
+    //            string fileHash = GetFileHash(filePath);
+    //            string relativePath = "Assets" + filePath.Replace(Application.dataPath, "").Replace("\\", "/");
+    //            fileHashData.fileHashes[relativePath] = fileHash;
+
+
+    //            await Task.Run(() => PushFileToGitHub(repoOwner, repoName, token, filePath, commitMessage));
+
+    //            GitHubFileTracker.alreadyPushedFiles.Add(filePath);
+
+    //            string metaFile = filePath + ".meta";
+    //            if (File.Exists(Path.Combine(Application.dataPath, metaFile.Replace("Assets/", ""))))
+    //            {
+    //                GitHubFileTracker.alreadyPushedFiles.Add(metaFile);
+    //            }
+
+    //            GitHubFileTracker.SavePushedFiles();
+
+    //            processed++;
+    //            progress = (float)processed / total;
+    //            Repaint();
+    //        }
+
+    //        File.WriteAllText(pushedFilesPath, JsonConvert.SerializeObject(GitHubFileTracker.alreadyPushedFiles, Formatting.Indented));
+    //    }
+    //    else
+    //    {
+    //        Debug.LogError("Version update failed. Files not pushed.");
+    //    }
+    //    SaveFileHashes();
+    //    selectedFiles.Clear();
+    //    GitHubFileTracker.manuallyRemovedFiles.Clear();
+    //    isPushing = false;
+    //    pushCompleted = true;
+    //    SaveHistoryEntry(version, whatsNew);
+    //    Repaint();
+    //}
 
     private void SaveHistoryEntry(string version, string whatsNew)
     {
@@ -408,6 +723,17 @@ public class GitHubUpdater : EditorWindow
         }
         catch { return null; }
     }
+    private string GetFileHash(string filePath)
+    {
+        using (var md5 = System.Security.Cryptography.MD5.Create())
+        {
+            using (var stream = File.OpenRead(filePath))
+            {
+                var hash = md5.ComputeHash(stream);
+                return System.BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+            }
+        }
+    }
 
     private bool UploadToGitHub(string owner, string repo, string token, string localPath, string repoPath, string message)
     {
@@ -457,6 +783,473 @@ public class VersionHistory
 {
     public List<VersionHistoryEntry> entries = new List<VersionHistoryEntry>();
 }
+
+
+
+
+
+
+
+//// Add this at the top if not already present
+//using UnityEditor;
+//using UnityEngine;
+//using System.Collections.Generic;
+//using System.IO;
+//using System.Net;
+//using System.Text;
+//using Unity.Plastic.Newtonsoft.Json;
+//using System.Threading.Tasks;
+
+//public class GitHubUpdater : EditorWindow
+//{
+//    private VersionHistory versionHistory = new VersionHistory();
+//    private bool showHistory = false;
+
+//    private List<string> selectedFiles = new List<string>(); // Files to push
+//    private HashSet<string> alreadyPushedFiles = new HashSet<string>(); // Track pushed files
+//    private string pushedFilesPath => Path.Combine(Application.persistentDataPath, "pushed_files.json");
+//    private string historyFilePath => Path.Combine(Application.persistentDataPath, "GitHubUpdater_History.json");
+
+//    private string version = "1.0";
+//    private string whatsNew = "";
+//    private float progress = 0f;
+//    private bool isPushing = false;
+//    private bool pushCompleted = false;
+
+//    private Vector2 selectedFilesScrollPos = Vector2.zero;
+//    private Vector2 historyScrollPos = Vector2.zero;
+
+//    [MenuItem("Tools/GitHub Updater")]
+//    public static void ShowWindow()
+//    {
+//        var window = GetWindow<GitHubUpdater>("GitHub Updater");
+//        window.LoadHistory();
+//        window.LoadPushedFiles();
+//    }
+
+//    private void LoadHistory()
+//    {
+//        if (File.Exists(historyFilePath))
+//        {
+//            string json = File.ReadAllText(historyFilePath);
+//            versionHistory = JsonConvert.DeserializeObject<VersionHistory>(json);
+//        }
+//    }
+
+//    private void LoadPushedFiles()
+//    {
+//        if (File.Exists(pushedFilesPath))
+//        {
+//            string json = File.ReadAllText(pushedFilesPath);
+//            alreadyPushedFiles = JsonConvert.DeserializeObject<HashSet<string>>(json);
+//        }
+//    }
+
+//    private void OnGUI()
+//    {
+//        SyncAutoDetectedFiles();
+
+//        GUILayout.Label("Select Files or Folder to Upload", EditorStyles.boldLabel);
+
+//        if (GUILayout.Button("Add Files"))
+//        {
+//            string filePath = EditorUtility.OpenFilePanel("Select File", Application.dataPath, "*");
+//            if (!string.IsNullOrEmpty(filePath)) AddFile(filePath);
+//        }
+
+//        if (GUILayout.Button("Add Folder"))
+//        {
+//            string folderPath = EditorUtility.OpenFolderPanel("Select Folder", Application.dataPath, "");
+//            if (!string.IsNullOrEmpty(folderPath)) AddFolder(folderPath);
+//        }
+
+//        if (GUILayout.Button("Show New Changes"))
+//        {
+//            ScanForNewChanges();
+//        }
+
+//        GUILayout.Label("Selected Files:", EditorStyles.boldLabel);
+
+//        selectedFilesScrollPos = EditorGUILayout.BeginScrollView(selectedFilesScrollPos, GUILayout.Height(150));
+//        for (int i = 0; i < selectedFiles.Count; i++)
+//        {
+//            GUILayout.BeginHorizontal();
+//            GUILayout.Label(selectedFiles[i], GUILayout.ExpandWidth(true));
+//            if (GUILayout.Button("❌", GUILayout.Width(25)))
+//            {
+//                GitHubFileTracker.manuallyRemovedFiles.Add(selectedFiles[i]);
+//                selectedFiles.RemoveAt(i);
+//                i--;
+//            }
+//            GUILayout.EndHorizontal();
+//        }
+//        EditorGUILayout.EndScrollView();
+
+//        if (GUILayout.Button("Clear Selected Files"))
+//        {
+//            selectedFiles.Clear();
+//           // GitHubFileTracker.manuallyRemovedFiles.Clear();
+
+//        }
+
+//        if (GUILayout.Button("Show Current Version"))
+//        {
+//            version = GetCurrentVersionFromFile();
+//        }
+
+//        version = EditorGUILayout.TextField("Version:", version);
+//        whatsNew = EditorGUILayout.TextArea(whatsNew, GUILayout.Height(100));
+
+//        if (GUILayout.Button("Push to GitHub") && !isPushing)
+//        {
+//            _ = PushToGitHubAsync();
+//        }
+
+//        if (isPushing)
+//        {
+//            EditorGUI.ProgressBar(new Rect(10, position.height - 40, position.width - 20, 20), progress, "Uploading...");
+//            Repaint();
+//        }
+//        else if (pushCompleted)
+//        {
+//            GUIStyle style = new GUIStyle(GUI.skin.label) { normal = { textColor = Color.green } };
+//            GUILayout.Label("Push Completed!", style);
+//        }
+
+//        HandleDragAndDrop();
+
+//        GUILayout.Space(10);
+//        if (GUILayout.Button(showHistory ? "Hide History" : "Show History"))
+//        {
+//            showHistory = !showHistory;
+//        }
+
+//        if (showHistory)
+//        {
+//            GUILayout.Label("Push History", EditorStyles.boldLabel);
+//            historyScrollPos = EditorGUILayout.BeginScrollView(historyScrollPos, GUILayout.Height(200));
+//            foreach (var entry in versionHistory.entries)
+//            {
+//                EditorGUILayout.BeginVertical("box");
+//                GUILayout.Label("Version: " + entry.version, EditorStyles.boldLabel);
+//                GUILayout.Label("Date: " + entry.dateTime);
+//                GUILayout.Label("Notes:\n" + entry.whatsNew);
+//                EditorGUILayout.EndVertical();
+//            }
+//            EditorGUILayout.EndScrollView();
+//        }
+//    }
+
+//    private void ScanForNewChanges()
+//    {
+//        string[] allFiles = Directory.GetFiles(Application.dataPath, "*.*", SearchOption.AllDirectories);
+
+//        foreach (string absPath in allFiles)
+//        {
+//            if (absPath.EndsWith(".meta")) continue;
+
+//            string relativePath = "Assets" + absPath.Replace(Application.dataPath, "").Replace("\\", "/");
+
+//            if (!alreadyPushedFiles.Contains(relativePath) &&
+//                !GitHubFileTracker.manuallyRemovedFiles.Contains(relativePath) &&
+//                !selectedFiles.Contains(relativePath))
+//            {
+//                selectedFiles.Add(relativePath);
+
+//                string metaRelative = relativePath + ".meta";
+//                if (File.Exists(Path.Combine(Application.dataPath, metaRelative.Replace("Assets/", ""))) &&
+//                    !selectedFiles.Contains(metaRelative) &&
+//                    !alreadyPushedFiles.Contains(metaRelative) &&
+//                    !GitHubFileTracker.manuallyRemovedFiles.Contains(metaRelative))
+//                {
+//                    selectedFiles.Add(metaRelative);
+//                }
+//            }
+//        }
+//    }
+
+
+//    private void SyncAutoDetectedFiles()
+//    {
+//        foreach (string path in GitHubFileTracker.autoDetectedFiles)
+//        {
+//            if (!selectedFiles.Contains(path) &&
+//                !GitHubFileTracker.manuallyRemovedFiles.Contains(path))
+//            {
+//                selectedFiles.Add(path);
+//                string metaPath = path + ".meta";
+//                if (!selectedFiles.Contains(metaPath) &&
+//                    !GitHubFileTracker.manuallyRemovedFiles.Contains(metaPath))
+//                {
+//                    selectedFiles.Add(metaPath);
+//                }
+//            }
+//        }
+
+//        foreach (string deletedPath in GitHubFileTracker.deletedFiles)
+//        {
+//            selectedFiles.Remove(deletedPath);
+//            selectedFiles.Remove(deletedPath + ".meta");
+//        }
+
+//        GitHubFileTracker.autoDetectedFiles.Clear();
+//        GitHubFileTracker.deletedFiles.Clear();
+//    }
+
+//    private void HandleDragAndDrop()
+//    {
+//        Event evt = Event.current;
+//        if (evt.type == EventType.DragUpdated || evt.type == EventType.DragPerform)
+//        {
+//            DragAndDrop.visualMode = DragAndDropVisualMode.Copy;
+//            if (evt.type == EventType.DragPerform)
+//            {
+//                DragAndDrop.AcceptDrag();
+//                foreach (var obj in DragAndDrop.objectReferences)
+//                {
+//                    string path = AssetDatabase.GetAssetPath(obj);
+//                    if (Directory.Exists(path))
+//                        AddFolder(Path.Combine(Application.dataPath, path.Replace("Assets/", "")));
+//                    else
+//                        AddFile(Path.Combine(Application.dataPath, path.Replace("Assets/", "")));
+//                }
+//            }
+//            evt.Use();
+//        }
+//    }
+
+//    private void AddFile(string absolutePath)
+//    {
+//        string relativePath = "Assets" + absolutePath.Replace(Application.dataPath, "").Replace("\\", "/");
+
+//        if (!selectedFiles.Contains(relativePath))
+//        {
+//            selectedFiles.Add(relativePath);
+//        }
+
+//        string metaPath = absolutePath + ".meta";
+//        string metaRelative = relativePath + ".meta";
+
+//        if (File.Exists(metaPath) && !selectedFiles.Contains(metaRelative))
+//        {
+//            selectedFiles.Add(metaRelative);
+//        }
+//    }
+
+//    private void AddFolder(string folderPath)
+//    {
+//        if (!string.IsNullOrEmpty(folderPath))
+//        {
+//            string[] files = Directory.GetFiles(folderPath, "*.*", SearchOption.AllDirectories);
+//            foreach (string file in files) AddFile(file);
+//        }
+//    }
+
+//    private string GetCurrentVersionFromFile()
+//    {
+//        string path = "Assets/version.txt";
+//        return File.Exists(path) ? File.ReadAllLines(path)[0] : "Unknown";
+//    }
+
+//    private async Task PushToGitHubAsync()
+//    {
+//        isPushing = true;
+//        pushCompleted = false;
+//        progress = 0f;
+//        Repaint();
+
+//        string commitMessage = "Updating files to version " + version;
+//        string repoOwner = GitHubConfig_Info.RepositoryOwner;
+//        string repoName = GitHubConfig_Info.RepositoryName;
+//        string token = GitHubConfig_Info.Token;
+
+//        bool versionUpdated = PushVersionFile(repoOwner, repoName, token, version, commitMessage);
+
+//        if (versionUpdated)
+//        {
+//            int total = selectedFiles.Count;
+//            int processed = 0;
+
+//            //foreach (string filePath in selectedFiles)
+//            //{
+//            //    await Task.Run(() => PushFileToGitHub(repoOwner, repoName, token, filePath, commitMessage));
+//            //    alreadyPushedFiles.Add(filePath);
+//            //    processed++;
+//            //    progress = (float)processed / total;
+//            //    Repaint();
+//            //}
+
+//            //foreach (string filePath in selectedFiles)
+//            //{
+//            //    await Task.Run(() => PushFileToGitHub(repoOwner, repoName, token, filePath, commitMessage));
+//            //   // alreadyPushedFiles.Add(filePath);
+
+//            //    GitHubFileTracker.alreadyPushedFiles.Add(filePath);
+//            //    GitHubFileTracker.SavePushedFiles();
+
+
+//            //    // Add corresponding .meta file if it exists
+//            //    string metaFile = filePath + ".meta";
+//            //    if (File.Exists(Path.Combine(Application.dataPath, metaFile.Replace("Assets/", ""))))
+//            //    {
+//            //        alreadyPushedFiles.Add(metaFile);
+//            //    }
+
+//            //    processed++;
+//            //    progress = (float)processed / total;
+//            //    Repaint();
+//            //}
+
+//            foreach (string filePath in selectedFiles)
+//            {
+//                await Task.Run(() => PushFileToGitHub(repoOwner, repoName, token, filePath, commitMessage));
+
+//                // Add file and its meta (if exists) to alreadyPushedFiles and persist
+//                GitHubFileTracker.alreadyPushedFiles.Add(filePath);
+
+//                string metaFile = filePath + ".meta";
+//                if (File.Exists(metaFile))
+//                {
+//                    GitHubFileTracker.alreadyPushedFiles.Add(metaFile);
+//                }
+
+//                GitHubFileTracker.SavePushedFiles(); // Save once per file (fine for now, can optimize later)
+
+//                processed++;
+//                progress = (float)processed / total;
+//                Repaint();
+//            }
+
+
+
+//            File.WriteAllText(pushedFilesPath, JsonConvert.SerializeObject(alreadyPushedFiles, Formatting.Indented));
+//        }
+//        else
+//        {
+//            Debug.LogError("Version update failed. Files not pushed.");
+//        }
+
+//        selectedFiles.Clear();
+//        GitHubFileTracker.manuallyRemovedFiles.Clear();
+//        isPushing = false;
+//        pushCompleted = true;
+//        SaveHistoryEntry(version, whatsNew);
+//        Repaint();
+//    }
+
+//    private void SaveHistoryEntry(string version, string whatsNew)
+//    {
+//        versionHistory.entries.Insert(0, new VersionHistoryEntry
+//        {
+//            version = version,
+//            whatsNew = whatsNew,
+//            dateTime = System.DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+//        });
+
+//        string json = JsonConvert.SerializeObject(versionHistory, Formatting.Indented);
+//        File.WriteAllText(historyFilePath, json);
+//    }
+
+//    private bool PushVersionFile(string owner, string repo, string token, string version, string message)
+//    {
+//        string path = "Assets/version.txt";
+//        string absPath = Path.Combine(Application.dataPath, "version.txt");
+//        File.WriteAllText(absPath, $"{version}\n\nWhat's New:\n{whatsNew}");
+//        AssetDatabase.ImportAsset(path);
+//        AssetDatabase.Refresh();
+
+//        return PushFileToGitHub(owner, repo, token, path, message);
+//    }
+
+//    private bool PushFileToGitHub(string owner, string repo, string token, string path, string message)
+//    {
+//        string repoPath = path.Replace("Assets/", "").TrimStart('/');
+//        string absPath = Path.Combine(Application.dataPath, path.Replace("Assets/", ""));
+
+//        if (!File.Exists(absPath))
+//        {
+//            Debug.LogError($"File not found: {absPath}");
+//            return false;
+//        }
+
+//        if (!UploadToGitHub(owner, repo, token, absPath, repoPath, message))
+//            return false;
+
+//        string metaPath = absPath + ".meta";
+//        if (File.Exists(metaPath))
+//        {
+//            string metaRepoPath = repoPath + ".meta";
+//            UploadToGitHub(owner, repo, token, metaPath, metaRepoPath, message);
+//        }
+
+//        return true;
+//    }
+
+//    private string GetFileSHA(string owner, string repo, string path, string token)
+//    {
+//        try
+//        {
+//            string url = $"https://api.github.com/repos/{owner}/{repo}/contents/{path}";
+//            using (WebClient client = new WebClient())
+//            {
+//                client.Headers.Add("Authorization", "token " + token);
+//                client.Headers.Add("User-Agent", "UnityGitHubUploader");
+//                string response = client.DownloadString(url);
+//                var json = JsonConvert.DeserializeObject<Dictionary<string, object>>(response);
+//                return json.ContainsKey("sha") ? json["sha"].ToString() : null;
+//            }
+//        }
+//        catch { return null; }
+//    }
+
+//    private bool UploadToGitHub(string owner, string repo, string token, string localPath, string repoPath, string message)
+//    {
+//        string content = System.Convert.ToBase64String(File.ReadAllBytes(localPath));
+//        string sha = GetFileSHA(owner, repo, repoPath, token);
+
+//        var payload = new Dictionary<string, object>
+//        {
+//            { "message", message },
+//            { "content", content }
+//        };
+
+//        if (!string.IsNullOrEmpty(sha)) payload["sha"] = sha;
+
+//        string json = JsonConvert.SerializeObject(payload);
+//        string url = $"https://api.github.com/repos/{owner}/{repo}/contents/{repoPath}";
+
+//        try
+//        {
+//            using (WebClient client = new WebClient())
+//            {
+//                client.Headers.Add("Authorization", "token " + token);
+//                client.Headers.Add("User-Agent", "UnityGitHubUploader");
+//                client.Headers.Add("Content-Type", "application/json");
+//                client.UploadString(url, "PUT", json);
+//                return true;
+//            }
+//        }
+//        catch (WebException ex)
+//        {
+//            Debug.LogError($"Upload failed for {repoPath}: {ex.Message}");
+//            return false;
+//        }
+//    }
+//}
+
+//[System.Serializable]
+//public class VersionHistoryEntry
+//{
+//    public string version;
+//    public string whatsNew;
+//    public string dateTime;
+//}
+
+//[System.Serializable]
+//public class VersionHistory
+//{
+//    public List<VersionHistoryEntry> entries = new List<VersionHistoryEntry>();
+//}
 
 
 
