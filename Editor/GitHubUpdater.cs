@@ -26,7 +26,6 @@ public class GitHubUpdater : EditorWindow
     private Vector2 historyScrollPos = Vector2.zero;
 
 
-
     [MenuItem("Tools/GitHub Updater")]
     public static void ShowWindow()
     {
@@ -113,6 +112,19 @@ public class GitHubUpdater : EditorWindow
         EditorGUILayout.EndScrollView();
 
 
+
+        GUILayout.Space(5);
+        if (GUILayout.Button("Clear Selected Files"))
+        {
+            selectedFiles.Clear();
+            GitHubFileTracker.manuallyRemovedFiles.Clear(); // Optional
+        }
+
+        GUILayout.Space(5);
+        if (GUILayout.Button("Show New Changes"))
+        {
+            ScanForNewChanges();
+        }
 
 
         // Restore "Show Current Version" Button
@@ -201,6 +213,25 @@ public class GitHubUpdater : EditorWindow
 
         GitHubFileTracker.autoDetectedFiles.Clear();
         GitHubFileTracker.deletedFiles.Clear();
+    }
+    private void ScanForNewChanges()
+    {
+        string[] allFiles = Directory.GetFiles(Application.dataPath, "*.*", SearchOption.AllDirectories);
+
+        foreach (string absPath in allFiles)
+        {
+            // Skip .meta files directly (we'll add them via AddFile automatically)
+            if (absPath.EndsWith(".meta")) continue;
+
+            // Convert absolute path to Unity relative path
+            string relativePath = "Assets" + absPath.Replace(Application.dataPath, "").Replace("\\", "/");
+
+            // If not already added and not manually removed
+            if (!selectedFiles.Contains(relativePath) && !GitHubFileTracker.manuallyRemovedFiles.Contains(relativePath))
+            {
+                AddFile(absPath); // Add file and its .meta file
+            }
+        }
     }
 
 
@@ -324,6 +355,9 @@ public class GitHubUpdater : EditorWindow
         {
             Debug.LogError("Failed to update version. Files not pushed.");
         }
+
+        selectedFiles.Clear(); // Clear files after push
+        GitHubFileTracker.manuallyRemovedFiles.Clear(); // Optional: clear manual skip list too
 
         isPushing = false;
         pushCompleted = true;
