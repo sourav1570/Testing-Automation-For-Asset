@@ -96,7 +96,7 @@ public class GitHubUpdater : EditorWindow
         if (GUILayout.Button("Clear Selected Files"))
         {
             selectedFiles.Clear();
-            GitHubFileTracker.manuallyRemovedFiles.Clear();
+           // GitHubFileTracker.manuallyRemovedFiles.Clear();
         }
 
         if (GUILayout.Button("Show Current Version"))
@@ -157,14 +157,24 @@ public class GitHubUpdater : EditorWindow
 
             string relativePath = "Assets" + absPath.Replace(Application.dataPath, "").Replace("\\", "/");
 
-            if (!selectedFiles.Contains(relativePath)
-                && !alreadyPushedFiles.Contains(relativePath)
-                && !GitHubFileTracker.manuallyRemovedFiles.Contains(relativePath))
+            if (!alreadyPushedFiles.Contains(relativePath) &&
+                !GitHubFileTracker.manuallyRemovedFiles.Contains(relativePath) &&
+                !selectedFiles.Contains(relativePath))
             {
-                AddFile(absPath);
+                selectedFiles.Add(relativePath);
+
+                string metaRelative = relativePath + ".meta";
+                if (File.Exists(Path.Combine(Application.dataPath, metaRelative.Replace("Assets/", ""))) &&
+                    !selectedFiles.Contains(metaRelative) &&
+                    !alreadyPushedFiles.Contains(metaRelative) &&
+                    !GitHubFileTracker.manuallyRemovedFiles.Contains(metaRelative))
+                {
+                    selectedFiles.Add(metaRelative);
+                }
             }
         }
     }
+
 
     private void SyncAutoDetectedFiles()
     {
@@ -267,14 +277,32 @@ public class GitHubUpdater : EditorWindow
             int total = selectedFiles.Count;
             int processed = 0;
 
+            //foreach (string filePath in selectedFiles)
+            //{
+            //    await Task.Run(() => PushFileToGitHub(repoOwner, repoName, token, filePath, commitMessage));
+            //    alreadyPushedFiles.Add(filePath);
+            //    processed++;
+            //    progress = (float)processed / total;
+            //    Repaint();
+            //}
+
             foreach (string filePath in selectedFiles)
             {
                 await Task.Run(() => PushFileToGitHub(repoOwner, repoName, token, filePath, commitMessage));
                 alreadyPushedFiles.Add(filePath);
+
+                // Add corresponding .meta file if it exists
+                string metaFile = filePath + ".meta";
+                if (File.Exists(Path.Combine(Application.dataPath, metaFile.Replace("Assets/", ""))))
+                {
+                    alreadyPushedFiles.Add(metaFile);
+                }
+
                 processed++;
                 progress = (float)processed / total;
                 Repaint();
             }
+
 
             File.WriteAllText(pushedFilesPath, JsonConvert.SerializeObject(alreadyPushedFiles, Formatting.Indented));
         }
