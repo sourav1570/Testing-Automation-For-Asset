@@ -1,4 +1,4 @@
-2.6
+2.7
 
 What's New:
-Let  do the upload two point six
+Let  do the upload two point seven
