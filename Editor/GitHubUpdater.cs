@@ -25,6 +25,10 @@ public class GitHubUpdater : EditorWindow
     private Vector2 selectedFilesScrollPos = Vector2.zero;
     private Vector2 historyScrollPos = Vector2.zero;
 
+    private static readonly string pushedFilesPath = "Assets/GitHubUploader_PushedFiles.json";
+    private HashSet<string> alreadyPushedFiles = new HashSet<string>();
+
+
 
     [MenuItem("Tools/GitHub Updater")]
     public static void ShowWindow()
@@ -33,6 +37,23 @@ public class GitHubUpdater : EditorWindow
         GetWindow<GitHubUpdater>("GitHub Updater").LoadHistory();
 
     }
+    private void OnEnable()
+    {
+        LoadAlreadyPushedFiles();
+    }
+    private void LoadAlreadyPushedFiles()
+    {
+        if (File.Exists(pushedFilesPath))
+        {
+            string json = File.ReadAllText(pushedFilesPath);
+            alreadyPushedFiles = JsonConvert.DeserializeObject<HashSet<string>>(json);
+        }
+        else
+        {
+            alreadyPushedFiles = new HashSet<string>();
+        }
+    }
+
     private void LoadHistory()
     {
         if (File.Exists(historyFilePath))
@@ -220,19 +241,19 @@ public class GitHubUpdater : EditorWindow
 
         foreach (string absPath in allFiles)
         {
-            // Skip .meta files directly (we'll add them via AddFile automatically)
             if (absPath.EndsWith(".meta")) continue;
 
-            // Convert absolute path to Unity relative path
             string relativePath = "Assets" + absPath.Replace(Application.dataPath, "").Replace("\\", "/");
 
-            // If not already added and not manually removed
-            if (!selectedFiles.Contains(relativePath) && !GitHubFileTracker.manuallyRemovedFiles.Contains(relativePath))
+            if (!selectedFiles.Contains(relativePath)
+                && !GitHubFileTracker.manuallyRemovedFiles.Contains(relativePath)
+                && !alreadyPushedFiles.Contains(relativePath))
             {
-                AddFile(absPath); // Add file and its .meta file
+                AddFile(absPath); // adds file and its .meta
             }
         }
     }
+
 
 
 
@@ -350,6 +371,16 @@ public class GitHubUpdater : EditorWindow
                 progress = (float)processedFiles / totalFiles;
                 Repaint();
             }
+
+            // After uploading each file, track it
+            foreach (var filePath in selectedFiles)
+            {
+                alreadyPushedFiles.Add(filePath);
+            }
+
+            // Save the updated list to disk
+            File.WriteAllText(pushedFilesPath, JsonConvert.SerializeObject(alreadyPushedFiles, Formatting.Indented));
+
         }
         else
         {
