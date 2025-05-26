@@ -39,6 +39,8 @@ public class GitHubUpdater : EditorWindow
     private GUIStyle boxStyle;
 
 
+
+
     [MenuItem("Tools/GitHub Updater")]
     public static void ShowWindow()
     {
@@ -107,6 +109,20 @@ public class GitHubUpdater : EditorWindow
             boxStyle.padding = new RectOffset(8, 8, 8, 8);
         }
     }
+    private void AddSavedAutoTrackedFilesToSelected()
+    {
+        // Load the saved auto tracked files into GitHubFileTracker.autoTrackedFiles
+        GitHubFileTracker.LoadAutoTrackedFilesFromDisk();
+
+        // Add each loaded file to selectedFiles if it's not already there
+        foreach (string path in GitHubFileTracker.autoTrackedFiles)
+        {
+            if (!selectedFiles.Contains(path))
+            {
+                selectedFiles.Add(path);
+            }
+        }
+    }
 
     private void OnGUI()
     {
@@ -133,7 +149,7 @@ public class GitHubUpdater : EditorWindow
         }
         if (GUILayout.Button("Show New Changes", buttonStyle))
         {
-            ScanForNewChanges();
+            AddSavedAutoTrackedFilesToSelected();
         }
         GUILayout.EndHorizontal();
 
@@ -356,19 +372,50 @@ public class GitHubUpdater : EditorWindow
 
 
 
+    //private void SyncAutoDetectedFiles()
+    //{
+    //    foreach (string path in GitHubFileTracker.autoDetectedFiles)
+    //    {
+    //        if (!selectedFiles.Contains(path) &&
+    //            !GitHubFileTracker.manuallyRemovedFiles.Contains(path))
+    //        {
+    //            selectedFiles.Add(path);
+    //            string metaPath = path + ".meta";
+    //            if (!selectedFiles.Contains(metaPath) &&
+    //                !GitHubFileTracker.manuallyRemovedFiles.Contains(metaPath))
+    //            {
+    //                selectedFiles.Add(metaPath);
+    //            }
+    //        }
+    //    }
+
+    //    foreach (string deletedPath in GitHubFileTracker.deletedFiles)
+    //    {
+    //        selectedFiles.Remove(deletedPath);
+    //        selectedFiles.Remove(deletedPath + ".meta");
+    //    }
+
+    //    GitHubFileTracker.autoDetectedFiles.Clear();
+    //    GitHubFileTracker.deletedFiles.Clear();
+    //}
     private void SyncAutoDetectedFiles()
     {
+        List<string> newlyAutoTracked = new List<string>();
+
         foreach (string path in GitHubFileTracker.autoDetectedFiles)
         {
             if (!selectedFiles.Contains(path) &&
                 !GitHubFileTracker.manuallyRemovedFiles.Contains(path))
             {
                 selectedFiles.Add(path);
+                newlyAutoTracked.Add(path);
+
                 string metaPath = path + ".meta";
                 if (!selectedFiles.Contains(metaPath) &&
                     !GitHubFileTracker.manuallyRemovedFiles.Contains(metaPath))
                 {
                     selectedFiles.Add(metaPath);
+                    newlyAutoTracked.Add(metaPath);
                 }
             }
         }
@@ -377,11 +424,28 @@ public class GitHubUpdater : EditorWindow
         {
             selectedFiles.Remove(deletedPath);
             selectedFiles.Remove(deletedPath + ".meta");
+            newlyAutoTracked.Remove(deletedPath);
+            newlyAutoTracked.Remove(deletedPath + ".meta");
         }
+
+        SaveAutoTrackedFiles(newlyAutoTracked);
 
         GitHubFileTracker.autoDetectedFiles.Clear();
         GitHubFileTracker.deletedFiles.Clear();
     }
+    private void SaveAutoTrackedFiles(List<string> autoTracked)
+    {
+        foreach (string path in autoTracked)
+        {
+            if (!GitHubFileTracker.autoTrackedFiles.Contains(path))
+            {
+                GitHubFileTracker.autoTrackedFiles.Add(path);
+            }
+        }
+
+        GitHubFileTracker.SaveAutoTrackedFilesToDisk();
+    }
+
 
     private void HandleDragAndDrop()
     {
