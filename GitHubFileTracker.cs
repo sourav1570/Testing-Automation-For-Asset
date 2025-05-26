@@ -14,8 +14,12 @@ using UnityEditor;
 [InitializeOnLoad]
 public static class GitHubFileTracker
 {
-    public static HashSet<string> alreadyPushedFiles = new();
-    public static HashSet<string> manuallyRemovedFiles = new();
+    public static HashSet<string> autoDetectedFiles = new HashSet<string>();
+    public static HashSet<string> deletedFiles = new HashSet<string>();
+
+    // Also, you probably have:
+    public static HashSet<string> manuallyRemovedFiles = new HashSet<string>();
+    public static HashSet<string> alreadyPushedFiles = new HashSet<string>();
 
     static GitHubFileTracker()
     {
