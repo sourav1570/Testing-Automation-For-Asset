@@ -135,7 +135,9 @@ public class GitHubUpdater : EditorWindow
         EditorGUILayout.BeginVertical(boxStyle);
 
         GUILayout.Label("Select Files or Folder to Upload", sectionHeaderStyle);
+
         GUILayout.BeginHorizontal();
+
         if (GUILayout.Button("Add Files", buttonStyle))
         {
             string filePath = EditorUtility.OpenFilePanel("Select File", Application.dataPath, "*");
@@ -151,6 +153,10 @@ public class GitHubUpdater : EditorWindow
             AddSavedAutoTrackedFilesToSelected();
         }
         GUILayout.EndHorizontal();
+
+
+        GUILayout.Space(10);
+        DrawDragAndDropArea();
 
         GUILayout.Space(8);
 
@@ -222,9 +228,6 @@ public class GitHubUpdater : EditorWindow
             GUILayout.Space(10);
             GUILayout.Label("Push Completed!", greenLabelStyle);
         }
-
-        GUILayout.Space(10);
-        DrawDragAndDropArea();
 
         GUILayout.Space(10);
         if (GUILayout.Button(showHistory ? "Hide History" : "Show History", buttonStyle))
