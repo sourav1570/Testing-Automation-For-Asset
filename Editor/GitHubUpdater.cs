@@ -7,6 +7,7 @@ using System.Net;
 using System.Text;
 using Unity.Plastic.Newtonsoft.Json;
 using System.Threading.Tasks;
+using System;
 
 public class GitHubUpdater : EditorWindow
 {
@@ -37,8 +38,6 @@ public class GitHubUpdater : EditorWindow
     private GUIStyle labelStyle;
     private GUIStyle greenLabelStyle;
     private GUIStyle boxStyle;
-
-
 
 
     [MenuItem("Tools/GitHub Updater")]
@@ -199,6 +198,10 @@ public class GitHubUpdater : EditorWindow
 
         GUILayout.Space(10);
 
+        EditorGUILayout.Space();
+        GUILayout.Label("Versioning", EditorStyles.boldLabel);
+
+
         EditorGUI.BeginDisabledGroup(isPushing);
         if (GUILayout.Button("Push to GitHub", GUILayout.Height(30)))
         {
@@ -285,119 +288,6 @@ public class GitHubUpdater : EditorWindow
                 break;
         }
     }
-    //private void ScanForNewChanges()
-    //{
-    //    string[] allFiles = Directory.GetFiles(Application.dataPath, "*.*", SearchOption.AllDirectories);
-
-    //    foreach (string absPath in allFiles)
-    //    {
-    //        if (absPath.EndsWith(".meta")) continue;
-
-    //        string relativePath = "Assets" + absPath.Replace(Application.dataPath, "").Replace("\\", "/");
-
-    //        string currentHash = GetFileHash(absPath);
-
-    //        bool isNewFile = !fileHashData.fileHashes.ContainsKey(relativePath);
-    //        bool hasChanged = !isNewFile && fileHashData.fileHashes[relativePath] != currentHash;
-
-    //        if ((isNewFile || hasChanged) &&
-    //            !GitHubFileTracker.manuallyRemovedFiles.Contains(relativePath) &&
-    //            !selectedFiles.Contains(relativePath) &&
-    //            (!alreadyPushedFiles.Contains(relativePath) || hasChanged))
-    //        {
-    //            selectedFiles.Add(relativePath);
-
-    //            string metaRelative = relativePath + ".meta";
-    //            string metaAbsPath = Path.Combine(Application.dataPath, metaRelative.Replace("Assets/", ""));
-
-    //            if (File.Exists(metaAbsPath) &&
-    //                !selectedFiles.Contains(metaRelative) &&
-    //                !GitHubFileTracker.manuallyRemovedFiles.Contains(metaRelative))
-    //            {
-    //                selectedFiles.Add(metaRelative);
-    //            }
-    //        }
-    //    }
-    //}
-    private void ScanForNewChanges()
-    {
-        // Clear previous auto-detected files (optional, to avoid duplicates)
-        // But do not clear manually selected files or you lose user's choice.
-        // Only add new changed/new files here.
-
-        string[] allFiles = Directory.GetFiles(Application.dataPath, "*.*", SearchOption.AllDirectories);
-
-        List<string> newSelectedFiles = new List<string>();
-
-        foreach (string absPath in allFiles)
-        {
-            if (absPath.EndsWith(".meta")) continue;
-
-            string relativePath = "Assets" + absPath.Replace(Application.dataPath, "").Replace("\\", "/");
-
-            string currentHash = GetFileHash(absPath);
-
-            bool isNewFile = !fileHashData.fileHashes.ContainsKey(relativePath);
-            bool hasChanged = !isNewFile && fileHashData.fileHashes[relativePath] != currentHash;
-
-            // Only add if it's new or changed AND not manually removed AND
-            // if already pushed, only add if it has changed
-            if ((isNewFile || hasChanged) &&
-                !GitHubFileTracker.manuallyRemovedFiles.Contains(relativePath) &&
-                !selectedFiles.Contains(relativePath) &&
-                (!alreadyPushedFiles.Contains(relativePath) || hasChanged))
-            {
-                newSelectedFiles.Add(relativePath);
-
-                // Also add .meta file if exists and not manually removed or already added
-                string metaRelative = relativePath + ".meta";
-                string metaAbsPath = Path.Combine(Application.dataPath, metaRelative.Replace("Assets/", ""));
-                if (File.Exists(metaAbsPath) &&
-                    !GitHubFileTracker.manuallyRemovedFiles.Contains(metaRelative) &&
-                    !selectedFiles.Contains(metaRelative) &&
-                    !newSelectedFiles.Contains(metaRelative))
-                {
-                    newSelectedFiles.Add(metaRelative);
-                }
-            }
-        }
-
-        // Add these new detected changed files to selectedFiles
-        foreach (var f in newSelectedFiles)
-        {
-            if (!selectedFiles.Contains(f))
-                selectedFiles.Add(f);
-        }
-    }
-
-
-
-    //private void SyncAutoDetectedFiles()
-    //{
-    //    foreach (string path in GitHubFileTracker.autoDetectedFiles)
-    //    {
-    //        if (!selectedFiles.Contains(path) &&
-    //            !GitHubFileTracker.manuallyRemovedFiles.Contains(path))
-    //        {
-    //            selectedFiles.Add(path);
-    //            string metaPath = path + ".meta";
-    //            if (!selectedFiles.Contains(metaPath) &&
-    //                !GitHubFileTracker.manuallyRemovedFiles.Contains(metaPath))
-    //            {
-    //                selectedFiles.Add(metaPath);
-    //            }
-    //        }
-    //    }
-
-    //    foreach (string deletedPath in GitHubFileTracker.deletedFiles)
-    //    {
-    //        selectedFiles.Remove(deletedPath);
-    //        selectedFiles.Remove(deletedPath + ".meta");
-    //    }
-
-    //    GitHubFileTracker.autoDetectedFiles.Clear();
-    //    GitHubFileTracker.deletedFiles.Clear();
-    //}
     private void SyncAutoDetectedFiles()
     {
         List<string> newlyAutoTracked = new List<string>();
@@ -518,80 +408,63 @@ public class GitHubUpdater : EditorWindow
 
         if (versionUpdated)
         {
-            int total = 0;
+            // Collect all files: main + meta
+            List<string> filesToUpload = new List<string>();
             foreach (string filePath in selectedFiles)
             {
-                total++; // main file
-                         // Check for meta file using relative path:
-                string metaRelative = filePath + ".meta";
-                string metaAbsPath = Path.Combine(Application.dataPath, metaRelative.Replace("Assets/", ""));
-                if (File.Exists(metaAbsPath)) total++;
+                filesToUpload.Add(filePath);
+
+                string metaPath = filePath + ".meta";
+                string absMetaPath = Path.Combine(Application.dataPath, metaPath.Replace("Assets/", ""));
+                if (File.Exists(absMetaPath))
+                    filesToUpload.Add(metaPath);
             }
 
+            int total = filesToUpload.Count;
             int processed = 0;
 
-            foreach (string filePath in selectedFiles)
+            foreach (string filePath in filesToUpload)
             {
                 string absPath = Path.Combine(Application.dataPath, filePath.Replace("Assets/", ""));
-                string fileHash = GetFileHash(absPath);
-                fileHashData.fileHashes[filePath] = fileHash;
+                if (!File.Exists(absPath))
+                {
+                    Debug.LogWarning($"Skipped missing file: {filePath}");
+                    continue;
+                }
 
-                // Upload main file
+                // Hash only for main files
+                if (!filePath.EndsWith(".meta"))
+                {
+                    string fileHash = GetFileHash(absPath);
+                    fileHashData.fileHashes[filePath] = fileHash;
+                }
+
                 uploadStatusLabel = $"Uploading {processed + 1}/{total} files...";
                 Repaint();
-                bool mainUploadSuccess = await Task.Run(() => PushFileToGitHub(repoOwner, repoName, token, filePath, commitMessage));
-                //if (mainUploadSuccess)
-                //    alreadyPushedFiles.Add(filePath);
-                if (mainUploadSuccess)
+
+                bool success = await Task.Run(() => PushFileToGitHub(repoOwner, repoName, token, filePath, commitMessage));
+
+                if (success)
                 {
                     alreadyPushedFiles.Add(filePath);
 
-                    // Remove from auto-tracked if present
                     if (GitHubFileTracker.autoTrackedFiles.Contains(filePath))
                     {
                         GitHubFileTracker.autoTrackedFiles.Remove(filePath);
-                        GitHubFileTracker.SaveAutoTrackedFilesToDisk(); // Save updated list
+                        GitHubFileTracker.SaveAutoTrackedFilesToDisk();
                     }
                 }
                 else
-                    Debug.LogError($"Failed to upload {filePath}");
+                {
+                    Debug.LogError($"Failed to upload: {filePath}");
+                }
 
                 processed++;
                 progress = (float)processed / total;
                 uploadStatusLabel = $"Uploading {processed}/{total} files...";
                 Repaint();
 
-                // Upload meta file if exists
-                string metaRelative = filePath + ".meta";
-                string metaAbsPath = Path.Combine(Application.dataPath, metaRelative.Replace("Assets/", ""));
-                if (File.Exists(metaAbsPath))
-                {
-                    uploadStatusLabel = $"Uploading {processed + 1}/{total} files...";
-                    Repaint();
-
-                    bool metaUploadSuccess = await Task.Run(() => PushFileToGitHub(repoOwner, repoName, token, metaRelative, commitMessage));
-                    //if (metaUploadSuccess)
-                    //    alreadyPushedFiles.Add(metaRelative);
-                    if (metaUploadSuccess)
-                    {
-                        alreadyPushedFiles.Add(metaRelative);
-
-                        // Remove from auto-tracked if present
-                        if (GitHubFileTracker.autoTrackedFiles.Contains(metaRelative))
-                        {
-                            GitHubFileTracker.autoTrackedFiles.Remove(metaRelative);
-                            GitHubFileTracker.SaveAutoTrackedFilesToDisk();
-                        }
-                    }
-                    else
-                        Debug.LogError($"Failed to upload {metaRelative}");
-
-                    processed++;
-                    progress = (float)processed / total;
-                    uploadStatusLabel = $"Uploading {processed}/{total} files...";
-                    Repaint();
-                }
-                // Save pushed files each iteration so progress isn't lost on crash
+                // Save progress after each file
                 File.WriteAllText(pushedFilesPath, JsonConvert.SerializeObject(alreadyPushedFiles, Formatting.Indented));
             }
 
@@ -606,11 +479,42 @@ public class GitHubUpdater : EditorWindow
         SaveFileHashes();
         selectedFiles.Clear();
         GitHubFileTracker.manuallyRemovedFiles.Clear();
+
         isPushing = false;
         pushCompleted = true;
         uploadStatusLabel = "Upload completed!";
         Repaint();
     }
+
+    private bool CreateTagFromSha(string owner, string repo, string token, string tagName, string commitSha)
+    {
+        // Use GitHub API to create a tag reference from the commitSha.
+        // This is similar to your existing CreateTag method, but accepts SHA directly.
+
+        string url = $"https://api.github.com/repos/{owner}/{repo}/git/refs";
+        var payload = new
+        {
+            @ref = $"refs/tags/{tagName}",
+            sha = commitSha
+        };
+
+        var jsonPayload = JsonConvert.SerializeObject(payload);
+        using (var client = new System.Net.Http.HttpClient())
+        {
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("UnityGitHubUpdater");
+            client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("token", token);
+            var content = new System.Net.Http.StringContent(jsonPayload, Encoding.UTF8, "application/json");
+            var response = client.PostAsync(url, content).Result;
+            if (response.IsSuccessStatusCode)
+                return true;
+            else
+            {
+                Debug.LogError($"Failed to create tag {tagName}: {response.StatusCode}");
+                return false;
+            }
+        }
+    }
+
     private void SaveHistoryEntry(string version, string whatsNew)
     {
         versionHistory.entries.Insert(0, new VersionHistoryEntry
@@ -728,11 +632,6 @@ public class VersionHistory
 {
     public List<VersionHistoryEntry> entries = new List<VersionHistoryEntry>();
 }
-
-
-
-
-
 
 
 //// Add this at the top if not already present
