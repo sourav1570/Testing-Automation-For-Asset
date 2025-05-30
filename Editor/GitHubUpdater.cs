@@ -11,6 +11,15 @@ using System;
 
 public class GitHubUpdater : EditorWindow
 {
+    private string RepositoryOwner;
+    private string RepositoryName;
+    private string Token;
+
+    private const string OwnerKey = "GitHubUploader_RepoOwner";
+    private const string RepoKey = "GitHubUploader_RepoName";
+    private const string TokenKey = "GitHubUploader_Token";
+
+
     private VersionHistory versionHistory = new VersionHistory();
     private bool showHistory = false;
 
@@ -39,6 +48,8 @@ public class GitHubUpdater : EditorWindow
     private GUIStyle greenLabelStyle;
     private GUIStyle boxStyle;
 
+    private Vector2 scrollPos;
+
 
     [MenuItem("Tools/GitHub Updater")]
     public static void ShowWindow()
@@ -48,6 +59,31 @@ public class GitHubUpdater : EditorWindow
         window.LoadPushedFiles();
         window.LoadFileHashes();
 
+    }
+    private void OnEnable()
+    {
+        RepositoryOwner = EditorPrefs.GetString(OwnerKey, "your-default-owner");
+        RepositoryName = EditorPrefs.GetString(RepoKey, "your-default-repo");
+        Token = EditorPrefs.GetString(TokenKey, "your-default-token");
+    }
+
+    private void OnDisable()
+    {
+        EditorPrefs.SetString(OwnerKey, RepositoryOwner);
+        EditorPrefs.SetString(RepoKey, RepositoryName);
+        EditorPrefs.SetString(TokenKey, Token);
+    }
+    private void DeleteGitHubSettings()
+    {
+        EditorPrefs.DeleteKey("your-default-token");
+        EditorPrefs.DeleteKey("your-default-owner");
+        EditorPrefs.DeleteKey("your-default-repo");
+
+        Token = "";
+        RepositoryOwner = "";
+        RepositoryName = "";
+
+        Debug.Log("GitHub settings deleted.");
     }
     private void LoadFileHashes()
     {
@@ -125,12 +161,33 @@ public class GitHubUpdater : EditorWindow
 
     private void OnGUI()
     {
+        scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
         InitStyles();
 
         GUILayout.Space(8);
         GUILayout.Label("GitHub Updater", titleStyle);
 
         SyncAutoDetectedFiles();
+
+        EditorGUILayout.LabelField("GitHub Settings", EditorStyles.boldLabel);
+        RepositoryOwner = EditorGUILayout.TextField("Repository Owner", RepositoryOwner);
+        RepositoryName = EditorGUILayout.TextField("Repository Name", RepositoryName);
+        Token = EditorGUILayout.TextField("Token", Token);
+
+        EditorGUILayout.Space();
+
+        if (GUILayout.Button("Save GitHub Settings"))
+        {
+            EditorPrefs.SetString(OwnerKey, RepositoryOwner);
+            EditorPrefs.SetString(RepoKey, RepositoryName);
+            EditorPrefs.SetString(TokenKey, Token);
+            Debug.Log("GitHub settings saved.");
+        }
+
+        if (GUILayout.Button("Delete GitHub Settings"))
+        {
+            DeleteGitHubSettings();
+        }
 
         EditorGUILayout.BeginVertical(boxStyle);
 
@@ -205,10 +262,11 @@ public class GitHubUpdater : EditorWindow
         GUILayout.Space(10);
 
         EditorGUILayout.Space();
-        GUILayout.Label("Versioning", EditorStyles.boldLabel);
+       
 
 
         EditorGUI.BeginDisabledGroup(isPushing);
+
         if (GUILayout.Button("Push to GitHub", GUILayout.Height(30)))
         {
             _ = PushToGitHubAsync();
@@ -260,6 +318,7 @@ public class GitHubUpdater : EditorWindow
         }
 
         EditorGUILayout.EndVertical();
+        EditorGUILayout.EndScrollView();
     }
 
     private void DrawDragAndDropArea()
@@ -402,10 +461,10 @@ public class GitHubUpdater : EditorWindow
         uploadStatusLabel = "Starting upload...";
         Repaint();
 
-        string commitMessage = "Updating files to version " + version;
-        string repoOwner = GitHubConfig_Info.RepositoryOwner;
-        string repoName = GitHubConfig_Info.RepositoryName;
-        string token = GitHubConfig_Info.Token;
+        string commitMessage = "Updating files to version " + version + " " + whatsNew;
+        string repoOwner = RepositoryOwner;
+        string repoName = RepositoryName;
+        string token = Token;
 
         bool versionUpdated = PushVersionFile(repoOwner, repoName, token, version, commitMessage);
 
@@ -488,36 +547,6 @@ public class GitHubUpdater : EditorWindow
         uploadStatusLabel = "Upload completed!";
         Repaint();
     }
-
-    private bool CreateTagFromSha(string owner, string repo, string token, string tagName, string commitSha)
-    {
-        // Use GitHub API to create a tag reference from the commitSha.
-        // This is similar to your existing CreateTag method, but accepts SHA directly.
-
-        string url = $"https://api.github.com/repos/{owner}/{repo}/git/refs";
-        var payload = new
-        {
-            @ref = $"refs/tags/{tagName}",
-            sha = commitSha
-        };
-
-        var jsonPayload = JsonConvert.SerializeObject(payload);
-        using (var client = new System.Net.Http.HttpClient())
-        {
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("UnityGitHubUpdater");
-            client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("token", token);
-            var content = new System.Net.Http.StringContent(jsonPayload, Encoding.UTF8, "application/json");
-            var response = client.PostAsync(url, content).Result;
-            if (response.IsSuccessStatusCode)
-                return true;
-            else
-            {
-                Debug.LogError($"Failed to create tag {tagName}: {response.StatusCode}");
-                return false;
-            }
-        }
-    }
-
     private void SaveHistoryEntry(string version, string whatsNew)
     {
         versionHistory.entries.Insert(0, new VersionHistoryEntry
