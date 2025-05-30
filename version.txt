@@ -1,4 +1,3 @@
-4.7
+1.0
 
 What's New:
-this is 4.7
